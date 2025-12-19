@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, Mail, ArrowRight, ArrowLeft, Loader2, LogOut, User, Lock, KeyRound } from "lucide-react"
+import { X, Mail, ArrowRight, ArrowLeft, Loader2, LogOut, User, Lock, KeyRound, Pencil, Check, Upload } from "lucide-react"
 import { authClient } from "@/lib/auth-client"
+import { put } from "@vercel/blob"
+import { useRef } from "react"
 
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -77,6 +79,49 @@ export function AuthDrawer({ open, onOpenChange }: AuthDrawerProps) {
         }
     }
 
+    const [isEditingName, setIsEditingName] = useState(false)
+    const [newName, setNewName] = useState("")
+    const [isUploading, setIsUploading] = useState(false)
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const handleUpdateProfile = async () => {
+        setIsLoading(true)
+        try {
+            const { error } = await authClient.updateUser({
+                name: newName
+            })
+            if (error) throw error
+            setIsEditingName(false)
+        } catch {
+            setError("Failed to update profile")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        setIsUploading(true)
+        try {
+            const filename = `${Date.now()}-${file.name}`
+            const { url } = await put(filename, file, {
+                access: "public",
+                token: process.env.NEXT_PUBLIC_BLOB_READ_WRITE_TOKEN,
+            })
+
+            const { error } = await authClient.updateUser({
+                image: url
+            })
+            if (error) throw error
+        } catch {
+            setError("Failed to upload avatar")
+        } finally {
+            setIsUploading(false)
+        }
+    }
+
     return (
         <>
             {open && (
@@ -94,7 +139,7 @@ export function AuthDrawer({ open, onOpenChange }: AuthDrawerProps) {
                     open ? "translate-y-0 opacity-100" : "translate-y-full opacity-0 pointer-events-none"
                 )}
             >
-                <div className="bg-[#0a0a0a] border-t border-x border-white/10 rounded-t-3xl shadow-2xl overflow-hidden pb-safe">
+                <div className="bg-[#0a0a0a] border-t border-x border-white/10 rounded-t-3xl shadow-2xl max-h-[85vh] overflow-y-auto pb-safe">
                     {/* Header */}
                     <div className="relative px-6 pt-6 pb-2 flex items-center justify-between">
                         {step !== "email" && step !== "success" && step !== "profile" && (
@@ -190,30 +235,97 @@ export function AuthDrawer({ open, onOpenChange }: AuthDrawerProps) {
                             )}
 
                             {step === "profile" && session && (
-                                <div className="flex flex-col items-center text-center space-y-6 animate-fade-in">
-                                    <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center border border-white/10">
-                                        {session.user.image ? (
-                                            <img src={session.user.image} alt={session.user.name || "User"} className="w-full h-full rounded-full object-cover" />
-                                        ) : (
-                                            <User className="w-10 h-10 text-zinc-400" />
-                                        )}
+                                <div className="flex flex-col items-center space-y-8 animate-fade-in pt-4">
+                                    {/* Avatar */}
+                                    <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                                        <div className="w-24 h-24 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/10 overflow-hidden group-hover:border-white/30 transition-all">
+                                            {session.user.image ? (
+                                                <img src={session.user.image} alt={session.user.name || "User"} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <User className="w-10 h-10 text-zinc-400" />
+                                            )}
+                                            {isUploading && (
+                                                <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                                                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="absolute bottom-0 right-0 p-1.5 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
+                                            <Pencil className="w-3 h-3 text-black" />
+                                        </div>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleAvatarUpload}
+                                        />
                                     </div>
-                                    <div className="space-y-1">
-                                        <h2 className="text-xl font-bold text-white">{session.user.name || "User"}</h2>
-                                        <p className="text-sm text-zinc-400">{session.user.email}</p>
+
+                                    <div className="w-full space-y-6">
+                                        {/* Name Field */}
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Name</label>
+                                            <div className="relative group">
+                                                <div className="absolute left-4 top-3.5 pointer-events-none">
+                                                    <User className="w-5 h-5 text-zinc-500" />
+                                                </div>
+                                                <input
+                                                    value={isEditingName ? newName : (session.user.name || "")}
+                                                    onChange={(e) => setNewName(e.target.value)}
+                                                    onFocus={() => {
+                                                        setIsEditingName(true)
+                                                        setNewName(session.user.name || "")
+                                                    }}
+                                                    className="w-full pl-12 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
+                                                />
+                                                <div className="absolute right-3 top-3">
+                                                    {isEditingName ? (
+                                                        <button
+                                                            onClick={handleUpdateProfile}
+                                                            disabled={isLoading}
+                                                            className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+                                                        >
+                                                            {isLoading ? <Loader2 className="w-4 h-4 animate-spin text-zinc-400" /> : <Check className="w-4 h-4 text-green-400" />}
+                                                        </button>
+                                                    ) : (
+                                                        <Pencil className="w-4 h-4 text-zinc-600" />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Email Field (Read-only) */}
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Email</label>
+                                            <div className="relative">
+                                                <div className="absolute left-4 top-3.5 pointer-events-none">
+                                                    <Mail className="w-5 h-5 text-zinc-600" />
+                                                </div>
+                                                <input
+                                                    value={session.user.email}
+                                                    readOnly
+                                                    disabled
+                                                    className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/5 rounded-xl text-zinc-400 cursor-not-allowed"
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
-                                    <button
-                                        onClick={handleSignOut}
-                                        disabled={isLoading}
-                                        className="w-full py-3.5 rounded-2xl bg-white/5 text-red-400 font-medium hover:bg-white/10 border border-white/10 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                                            <>
-                                                <LogOut className="w-5 h-5" />
-                                                Sign Out
-                                            </>
-                                        )}
-                                    </button>
+
+                                    <div className="w-full pt-4 border-t border-white/5">
+                                        <button
+                                            onClick={handleSignOut}
+                                            disabled={isLoading}
+                                            className="w-full py-3.5 rounded-xl bg-red-500/10 text-red-400 font-medium hover:bg-red-500/20 border border-red-500/20 transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                                                <>
+                                                    <LogOut className="w-5 h-5" />
+                                                    Sign Out
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -257,7 +369,7 @@ function EmailForm({ email, setEmail, setStep, error, isSignUp, setIsSignUp }: {
                                     <Input
                                         {...field}
                                         placeholder="name@example.com"
-                                        className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
+                                        className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
                                         autoFocus
                                     />
                                 </FormControl>
@@ -360,7 +472,7 @@ function PasswordForm({ email, isSignUp, onSuccess, setStep, setError, error, se
                                         <Input
                                             {...field}
                                             placeholder="Your Name"
-                                            className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
+                                            className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
                                         />
                                     </FormControl>
                                 </div>
@@ -381,7 +493,7 @@ function PasswordForm({ email, isSignUp, onSuccess, setStep, setError, error, se
                                         {...field}
                                         type="password"
                                         placeholder="Password"
-                                        className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
+                                        className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
                                         autoFocus
                                     />
                                 </FormControl>
@@ -479,7 +591,7 @@ function OTPForm({ email, onSuccess, setStep, setError, error, setIsLoading, isL
                                     <Input
                                         {...field}
                                         placeholder="Enter OTP"
-                                        className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
+                                        className="w-full pl-12 pr-4 py-6 bg-white/5 border border-white/10 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/20 transition-all"
                                         autoFocus
                                     />
                                 </FormControl>
