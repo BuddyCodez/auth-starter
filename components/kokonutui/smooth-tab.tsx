@@ -11,7 +11,7 @@
  */
 
 import type { LucideIcon } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, type Variants, type Transition } from "motion/react";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
@@ -256,6 +256,7 @@ interface SmoothTabProps {
   className?: string;
   activeColor?: string;
   onChange?: (tabId: string) => void;
+  containerClassName?: string;
 }
 
 const slideVariants = {
@@ -284,7 +285,7 @@ const slideVariants = {
 
 const transition = {
   duration: 0.4,
-  ease: [0.32, 0.72, 0, 1],
+  ease: [0.32, 0.72, 0, 1] as const,
 };
 
 export default function SmoothTab({
@@ -293,6 +294,7 @@ export default function SmoothTab({
   className,
   activeColor = "bg-[#1F9CFE]",
   onChange,
+  containerClassName,
 }: SmoothTabProps) {
   const [selected, setSelected] = React.useState<string>(defaultTabId);
   const [direction, setDirection] = React.useState(0);
@@ -353,7 +355,7 @@ export default function SmoothTab({
     <div className="flex h-full flex-col">
       {/* Card Content Area */}
       <div className="relative mb-4 flex-1">
-        <div className="relative h-[200px] w-full rounded-lg border bg-card">
+        <div className={cn("relative h-[200px] w-full rounded-lg border bg-card", containerClassName)}>
           <div className="absolute inset-0 overflow-hidden rounded-lg">
             <AnimatePresence
               custom={direction}
@@ -371,8 +373,8 @@ export default function SmoothTab({
                   backfaceVisibility: "hidden",
                   WebkitBackfaceVisibility: "hidden",
                 }}
-                transition={transition as any}
-                variants={slideVariants as any}
+                transition={transition as Transition}
+                variants={slideVariants as Variants}
               >
                 {selectedItem?.cardContent}
               </motion.div>
